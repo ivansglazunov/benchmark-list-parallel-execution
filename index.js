@@ -10,24 +10,50 @@ const RSVP = require('rsvp');
 const Q = require('q');
 
 const benchmarks = {
-  'while by linked objects': (count) => {
-    const start = { listener: next => next(), next: null };
-    let last = start;
-    _.times(count, () => {
-      const next = { listener: next => next(), next: null };
-      last.next = next;
-      last = next;
-    });
+  'while by linked objects with resolve': (count) => {
     return {
       fn(defer) {
+        const start = { listener: resolve => resolve(), next: null };
+        let last = start;
+        _.times(count, () => {
+          const next = { listener: resolve => resolve(), next: null };
+          last.next = next;
+          last = next;
+        });
         let t = 0;
-        const next = () => {
+        const resolve = () => {
           t++;
           if (t === count) defer.resolve();
         }
         let pointer = start;
         while (pointer.next) {
-          pointer.listener(next);
+          pointer.listener(resolve);
+          pointer = pointer.next;
+        }
+      },
+      defer: true,
+    };
+  },
+  'while by linked objects with defer.resolve': (count) => {
+    return {
+      fn(defer) {
+        const start = { listener: defer => defer.resolve(), next: null };
+        let last = start;
+        _.times(count, () => {
+          const next = { listener: defer => defer.resolve(), next: null };
+          last.next = next;
+          last = next;
+        });
+        let t = 0;
+        const d = {
+          resolve: () => {
+            t++;
+            if (t === count) defer.resolve();
+          }
+        };
+        let pointer = start;
+        while (pointer.next) {
+          pointer.listener(d);
           pointer = pointer.next;
         }
       },
@@ -35,9 +61,9 @@ const benchmarks = {
     };
   },
   'for by array': (count) => {
-    const tasks = _.times(count, () => (next) => next());
     return {
       fn(defer) {
+        const tasks = _.times(count, () => (next) => next());
         let t = 0;
         const next = () => {
           t++;
@@ -51,9 +77,9 @@ const benchmarks = {
     };
   },
   'async.parallel': (count) => {
-    const tasks = _.times(count, () => (next) => next());
     return {
       fn(defer) {
+        const tasks = _.times(count, () => (next) => next());
         async.parallel(tasks, () => defer.resolve());
       },
       defer: true,
